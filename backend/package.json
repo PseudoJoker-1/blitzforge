@@ -1,0 +1,13 @@
+{
+  "name": "blitzforge-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mod registry API for the BlitzForge loader",
+  "scripts": {
+    "test": "node test/api.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

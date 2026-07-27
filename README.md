@@ -1,0 +1,90 @@
+# BlitzForge
+
+An in-game mod portal for World of Tanks Blitz: browse a reviewed catalogue
+from inside the hangar and install with one click, in the style of Geode for
+Geometry Dash.
+
+The project is in early development. What works today is the client-side
+catalogue screen and the registry API; installation is not wired up yet.
+
+## What is here
+
+| Path | What it is |
+| --- | --- |
+| `_mod_tools/build_catalog.py` | Generates the in-game catalogue screen from mod metadata and splices it into the hangar |
+| `_mod_tools/patch_dvpl.py` | Edits `.dvpl` client resources with a one-time backup, so any change can be rolled back |
+| `_mod_tools/dvpl.py` | `.dvpl` container reader/writer (LZ4 payload plus a 20-byte footer) |
+| `_mod_tools/mod_api/` | C ABI and runtime core for native mods: lifecycle, per-mod config, resource mounting, crash isolation |
+| `_mod_tools/proxy_dll/` | `version.dll` proxy that injects the loader into the game |
+| `backend/` | The mod registry API, deployed on Vercel |
+
+## The catalogue screen
+
+The screen is built entirely from the game's own declarative UI: DAVA YAML
+plus its `.actions` scripting language. No native code is involved in drawing
+it, so it matches the stock screens exactly and survives without a DLL.
+
+```
+python _mod_tools/build_catalog.py            # rebuild and install
+python _mod_tools/build_catalog.py --dry-run  # print the generated markup
+```
+
+Every run starts from the pristine `Hangar.yaml` in the backup directory, so a
+patch is never applied on top of a previous patch. Generated markup is checked
+for structural damage before installation — the client gives no parse
+diagnostics, a malformed screen is simply a crash on load.
+
+## Review policy
+
+A mod reaches the catalogue only after review. The registry returns an entry
+only when `review.status == "approved"`, and that filter lives in the shared
+layer rather than in each endpoint, so a new endpoint cannot forget it. A mod
+still in review answers `404` rather than `403`: response codes should not
+leak the queue.
+
+Not published, regardless of how it is packaged:
+
+- anything showing information the player should not have — enemy positions,
+  hit points, reload state
+- anything removing what obscures vision — vegetation, fog, darkness
+- anything claiming to be a different platform or client than it is
+
+**This is enforced by people, not by the API.** A native mod loader hands
+third-party code `resolve_rva`, `find_pattern` and `hook_create`, because it
+cannot function without them, and those are enough to build anything on the
+list above. The review process is the actual control. Nothing in this
+repository changes that, and the code does not pretend otherwise.
+
+## What is deliberately absent
+
+**Client resources.** `patch_dvpl.py` extracts originals from the user's own
+installation into `_mod_tools/backup/`. Those are Wargaming's files and are
+git-ignored. Mods that alter game resources are distributed as patches applied
+to the user's copy, never as copies of the originals.
+
+**A reverse-engineering address table.** An earlier build of this tooling
+included aimbot, ESP, wallhack and vegetation removal, together with a curated
+table of camera, entity and reload-timer addresses. All of it was removed, and
+the address table is git-ignored so it cannot come back through a stray commit.
+
+## Backend
+
+```
+cd backend
+npm test          # handler tests: the approved-only filter, 404 for hidden mods
+vercel deploy     # requires the Vercel CLI
+```
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/mods` | Approved mods |
+| `GET /api/mods?type=resource` | Filtered by type |
+| `GET /api/mods?q=rain` | Search over name, description and author |
+| `GET /api/mods/:id` | One mod |
+
+## Licence
+
+MIT. See `LICENSE`.
+
+`_mod_tools/proxy_dll/third_party/minhook` is vendored and carries its own BSD
+2-clause licence.

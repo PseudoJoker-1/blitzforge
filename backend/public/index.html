@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BlitzForge — реестр модов</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 3rem 1.25rem;
+    background: #0b0f14; color: #e8eaed;
+    font: 16px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+  p.sub { color: #98a2b3; margin: 0 0 2rem; }
+  code {
+    background: #151b23; border: 1px solid #232b36; border-radius: 4px;
+    padding: .15rem .4rem; font-size: .9em;
+  }
+  li { margin: .4rem 0; }
+  a { color: #7fb2ff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>BlitzForge</h1>
+  <p class="sub">Реестр модов для World of Tanks Blitz.</p>
+
+  <h2>API</h2>
+  <ul>
+    <li><code>GET /api/mods</code> — список одобренных модов</li>
+    <li><code>GET /api/mods?type=resource</code> — фильтр по типу</li>
+    <li><code>GET /api/mods?q=дождь</code> — поиск</li>
+    <li><code>GET /api/mods/:id</code> — один мод</li>
+  </ul>
+
+  <h2>Публикуется только то, что прошло ревью</h2>
+  <p>
+    Реестр отдаёт мод, только если у него <code>review.status == "approved"</code>.
+    Фильтр стоит в общем слое, а не в каждом обработчике, чтобы новая ручка не
+    могла про него забыть. Мод на рассмотрении отвечает <code>404</code>, а не
+    «доступ запрещён»: иначе по кодам ответов читается сама очередь.
+  </p>
+
+  <h2>Чего здесь нет</h2>
+  <p>
+    Реестр хранит метаданные, а не файлы игры. Моды, которые правят ресурсы
+    Wargaming, распространяются как патчи поверх клиента пользователя —
+    исходные ресурсы инструмент извлекает из его собственной копии.
+  </p>
+</main>
+</body>
+</html>

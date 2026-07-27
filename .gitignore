@@ -1,0 +1,32 @@
+# Build output
+_mod_tools/mod_api/build/
+_mod_tools/proxy_dll/build/
+_mod_tools/proxy_dll/*.dll
+_mod_tools/proxy_dll/*.lib
+_mod_tools/proxy_dll/*.exp
+_mod_tools/proxy_dll/*.obj
+_mod_tools/proxy_dll/build.log
+__pycache__/
+*.pyc
+
+# Extracted client resources.
+#
+# patch_dvpl.py writes the untouched originals here before editing anything.
+# They are Wargaming's files, taken out of the user's own installation, and
+# they must never be committed or redistributed. The tooling re-extracts them
+# from whatever copy of the game it is run against.
+_mod_tools/backup/
+_mod_tools/work/
+*.dvpl
+!_mod_tools/mod_api/tests/fixtures/*.dvpl
+
+# Reverse-engineering notes.
+#
+# A curated table of camera, entity, vehicle and reload-timer addresses is a
+# cheat toolkit no matter what it is called or which project holds it.
+_mod_tools/re_anchors.md
+_mod_tools/offset_scan.ps1
+
+# Vercel
+.vercel/
+node_modules/
