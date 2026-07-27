@@ -186,9 +186,14 @@ def install_button(indent, index=0, installed=False,
     # Only the card that was pressed reacts. modRequestSent alone is one flag
     # for the whole screen, so keying on it without the index latched every
     # button at once and the list stopped showing install state entirely.
+    #
+    # The condition cannot be written into the captions directly. This button
+    # carries a UIDataParamsComponent, which opens its own data scope, and the
+    # screen's local variables are not visible inside it - which is why both a
+    # `when` on the text and a `visible` binding silently did nothing while a
+    # plain literal drew fine. A declared param with an arg is how the game
+    # itself passes a value across that boundary.
     pressed = f"modRequestSent and modRequestIndex == {index}"
-    sent_when = pressed
-    idle_when = f"not ({pressed})"
     return (
         f'{p}-   class: "UIControl"\n'
         f'{p}    name: "InstallButton"\n'
@@ -200,6 +205,10 @@ def install_button(indent, index=0, installed=False,
         f'{p}        UIInputEventComponent:\n'
         f'{p}            onTouchUpInside: "ON_CLICK"\n'
         f'{p}        UIDataParamsComponent:\n'
+        f'{p}            params:\n'
+        f'{p}            - ["bool", "sent", "false", "false"]\n'
+        f'{p}            args:\n'
+        f'{p}                "sent": "{pressed}"\n'
         f'{p}            events:\n'
         f'{p}            - "ON_CLICK"\n'
         f'{p}            eventActions:\n'
@@ -212,8 +221,8 @@ def install_button(indent, index=0, installed=False,
         f'{p}            verticalPolicy: "FixedSize"\n'
         f'{p}            verticalValue: {height:.6f}\n'
         f'{p}    children:\n'
-        f'{caption_control(p, "Caption", caption, idle_when)}'
-        f'{caption_control(p, "CaptionSent", "ОТПРАВЛЕНО", sent_when)}'
+        f'{caption_control(p, "Caption", caption, "not sent")}'
+        f'{caption_control(p, "CaptionSent", "ОТПРАВЛЕНО", "sent")}'
     )
 
 
