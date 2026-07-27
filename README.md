@@ -77,27 +77,43 @@ That case is refused, not resolved.
 
 The actions language the catalogue is written in has 47 statement functions and
 every one of them is UI or animation. There is no file access, no network call,
-no way to open a URL. A button therefore cannot run the installer itself.
+no way to open a URL. A button cannot run the installer itself.
 
-What it can do is write to the client log, which `agent.py` tails:
+`Log()` looked like the answer and is not: the client writes only error,
+warning and info lines to `blitz-logs_*.txt`, with no debug level present at
+all, and UI logging sits below that cut.
+
+What does reach the log is the engine complaining about a resource it cannot
+find, and that is an error:
 
 ```
-button  ->  Log("BLITZFORGE:install:" + str(index))
-agent   ->  reads the line, maps the index to a mod id, runs the installer
+[error] [ConvertedFileSpriteDataLoader] File "~res:/Gfx/..." not found
 ```
 
-The index is what the button has; `cache/catalog_index.json` maps it back to an
-id and is written by the same `build_catalog` run that laid the cards out, so
-the two cannot disagree about which card is which mod.
+So a press points a one-pixel control at a sprite that does not exist, whose
+path carries the request:
+
+```
+button ->  Background.sprite = "~res:/BLITZFORGE/<verb>/<index>-<seq>"
+engine ->  logs that it cannot find it, at error level
+agent  ->  reads the path, maps the index to a mod id, runs the installer
+```
+
+The sequence number makes every press a distinct path, so a repeated action is
+not swallowed by the failed-sprite cache. `cache/catalog_index.json` maps the
+index back to a mod id and is written by the same `build_catalog` run that
+ordered the cards, so the two cannot disagree.
 
 ```
 python _mod_tools/agent.py           # follow the log and act on requests
-python _mod_tools/agent.py --probe   # check whether the log channel works
+python _mod_tools/agent.py --probe   # report which channel is arriving
 ```
 
-Resource patches change files the client reads at startup, so a press cannot
-take effect in the running session. The detail page says so rather than
-implying the mod is live.
+Removal asks for confirmation first. A button that has been pressed reads
+ОТПРАВЛЕНО, and a restart button appears: resource patches change files the
+client reads at startup, so nothing can take effect in the running session.
+Restarting relaunches through Steam and reopens the catalogue, by rebuilding
+the screen with a flag that `build_catalog` consumes on the way through.
 
 ## Review policy
 

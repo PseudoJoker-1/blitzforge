@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -27,8 +28,20 @@ HERE = Path(__file__).resolve().parent
 INDEX = HERE / "cache" / "catalog_index.json"
 STATE = HERE / "cache" / "agent_state.json"
 LOGS = (Path.home() / "AppData" / "Local" / "wotblitz" / "DAVAProject")
-REQUEST = re.compile(r"BLITZFORGE:(install|remove):(\d+)")
+# Two shapes for the same request.
+#
+# The client filters debug-level output - the log holds error, warning and info
+# lines and nothing below - so Log() from the UI may never arrive. What does
+# arrive is the engine complaining about a resource it cannot find, and that is
+# an error. The catalogue therefore asks for a sprite whose path encodes the
+# request, and the resulting "File ... not found" line is the channel.
+SPRITE_REQUEST = re.compile(r"BLITZFORGE/(\d)/(\d+)-(\d+)")
+LOG_REQUEST = re.compile(r"BLITZFORGE:(install|remove|restart):(\d+)")
+VERBS = {"1": "install", "2": "remove", "3": "restart"}
 POLL_SECONDS = 2
+
+STEAM_APP_ID = "444200"
+OPEN_ON_LOAD = HERE / "cache" / "open_catalog_on_load"
 
 
 def newest_log() -> Path | None:
@@ -60,7 +73,30 @@ def save_state(state: dict) -> None:
     STATE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
+def restart_client() -> None:
+    """Relaunch the client with the catalogue already open.
+
+    The screen cannot be opened from outside the game, so the flag makes the
+    next build start with it visible; build_catalog consumes the flag, which
+    keeps it from sticking on every later launch.
+    """
+    OPEN_ON_LOAD.parent.mkdir(parents=True, exist_ok=True)
+    OPEN_ON_LOAD.write_text("1", encoding="utf-8")
+    subprocess.run([sys.executable, str(HERE / "build_catalog.py")], check=False)
+
+    subprocess.run(["taskkill", "/IM", "wotblitz.exe", "/F"],
+                   capture_output=True, check=False)
+    time.sleep(2)
+    subprocess.run(["cmd", "/c", "start", "", f"steam://rungameid/{STEAM_APP_ID}"],
+                   check=False)
+    print("  restarting client with the catalogue open")
+
+
 def handle(verb: str, index: int) -> None:
+    if verb == "restart":
+        restart_client()
+        return
+
     order = load_index()
     if index >= len(order):
         print(f"  request for card {index}, but the catalogue has {len(order)}; "
@@ -86,12 +122,13 @@ def scan(path: Path, offset: int, act: bool = True) -> tuple[int, int]:
         text = handle_.read()
         new_offset = handle_.tell()
 
-    found = 0
-    for verb, index in REQUEST.findall(text):
-        found += 1
+    requests = [(VERBS[v], int(i)) for v, i, _seq in SPRITE_REQUEST.findall(text)]
+    requests += [(v, int(i)) for v, i in LOG_REQUEST.findall(text)]
+
+    for verb, index in requests:
         if act:
-            handle(verb, int(index))
-    return new_offset, found
+            handle(verb, index)
+    return new_offset, len(requests)
 
 
 def probe() -> int:
@@ -100,15 +137,22 @@ def probe() -> int:
         print(f"no client log under {LOGS}")
         return 1
     text = log.read_text(encoding="utf-8", errors="replace")
-    hits = REQUEST.findall(text)
+    sprite = SPRITE_REQUEST.findall(text)
+    logged = LOG_REQUEST.findall(text)
     print(f"log: {log.name} ({len(text)} chars)")
-    if hits:
-        print(f"channel works: {len(hits)} request(s) found -> {hits[:5]}")
+    print(f"  sprite channel: {len(sprite)} request(s)  {sprite[:4]}")
+    print(f"  Log() channel:  {len(logged)} request(s)  {logged[:4]}")
+
+    levels = sorted(set(re.findall(r"\[(info|debug|warning|error|trace)\]", text)))
+    print(f"  levels in this log: {levels}")
+    if "debug" not in levels:
+        print("  -> debug output is filtered, so Log() from the UI cannot"
+              " reach this file; the sprite channel is the one that matters")
+
+    if sprite or logged:
         return 0
-    print("no BLITZFORGE lines in this log.\n"
-          "Either no button was pressed in this session, or the client does\n"
-          "not route UI Log() calls to this file. Press an install button\n"
-          "once, then run this again.")
+    print("\nNo request found. Press a button in the catalogue once,"
+          " then run this again.")
     return 2
 
 

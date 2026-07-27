@@ -224,7 +224,8 @@ def install_button(indent, index=0, installed=False,
         f'{p}                horizontalPolicy: "PercentOfParent"\n'
         f'{p}                verticalPolicy: "PercentOfParent"\n'
         f'{p}        bindings:\n'
-        f'{p}        - ["UITextComponent.text", "\\"{caption}\\""]\n'
+        f'{p}        - ["UITextComponent.text", "when modRequestSent and '
+        f'modRequestIndex == {index} -> \\"ОТПРАВЛЕНО\\", \\"{caption}\\""]\n'
     )
 
 
@@ -320,6 +321,23 @@ def build_screen(mods: list[dict]) -> str:
         bindings:
         - ["visible", "modCatalogVisible"]
         children:
+        -   class: "UIControl"
+            name: "RequestSignal"
+            size: [1.000000, 1.000000]
+            input: false
+            components:
+                Background: {{}}
+                IgnoreLayout: {{}}
+                Anchor:
+                    leftAnchorEnabled: true
+                    topAnchorEnabled: true
+                SizePolicy:
+                    horizontalPolicy: "FixedSize"
+                    horizontalValue: 1.000000
+                    verticalPolicy: "FixedSize"
+                    verticalValue: 1.000000
+            bindings:
+            - ["Background.sprite", "when modRequestSent -> \\"~res:/BLITZFORGE/\\" + str(modRequestVerb) + \\"/\\" + str(modRequestIndex) + \\"-\\" + str(modRequestSeq), \\"\\""]
         -   class: "UIControl"
             name: "HeaderBar"
             size: [1024.000000, 80.000000]
@@ -427,7 +445,8 @@ def build_screen(mods: list[dict]) -> str:
                     children:
 {cards}'''
 
-    return head + "".join(detail_page(m, i) for i, m in enumerate(mods))
+    pages = "".join(detail_page(m, i) for i, m in enumerate(mods))
+    return head + pages + confirm_overlay()
 
 
 def detail_page(mod: dict, index: int) -> str:
@@ -536,9 +555,167 @@ def detail_page(mod: dict, index: int) -> str:
         '                bindings:\n'
         '                - ["visible", "modRequestSent"]\n'
         '                - ["UITextComponent.text", '
-        '"\\"Команда отправлена. Перезапустите игру, чтобы применить.\\""]\n'
+        '"\\"Команда отправлена. Изменения применятся после перезапуска.\\""]\n'
     )
+    detail += restart_button(12)
     return detail
+
+
+def restart_button(indent: int) -> str:
+    """Offered only once a request has been sent, since that is the only time
+    restarting achieves anything."""
+    p = " " * indent
+    return (
+        f'{p}-   class: "UIControl"\n'
+        f'{p}    name: "RestartButton"\n'
+        f'{p}    size: [260.000000, 52.000000]\n'
+        f'{p}    classes: "simple-button grey-shark-60-bg"\n'
+        f'{p}    components:\n'
+        f'{p}        Background: {{}}\n'
+        f'{p}        UIOpacityComponent: {{}}\n'
+        f'{p}        UIInputEventComponent:\n'
+        f'{p}            onTouchUpInside: "ON_CLICK"\n'
+        f'{p}        UIDataParamsComponent:\n'
+        f'{p}            events:\n'
+        f'{p}            - "ON_CLICK"\n'
+        f'{p}            eventActions:\n'
+        f'{p}            - ["ON_CLICK", "ON_MOD_RESTART_CLICKED", ""]\n'
+        f'{p}        Anchor:\n'
+        f'{p}            leftAnchorEnabled: true\n'
+        f'{p}            leftAnchor: 392.000000\n'
+        f'{p}            topAnchorEnabled: true\n'
+        f'{p}            topAnchor: 80.000000\n'
+        f'{p}        SizePolicy:\n'
+        f'{p}            horizontalPolicy: "FixedSize"\n'
+        f'{p}            horizontalValue: 260.000000\n'
+        f'{p}            verticalPolicy: "FixedSize"\n'
+        f'{p}            verticalValue: 52.000000\n'
+        f'{p}    bindings:\n'
+        f'{p}    - ["visible", "modRequestSent"]\n'
+        f'{p}    children:\n'
+        f'{p}    -   class: "UIControl"\n'
+        f'{p}        name: "Caption"\n'
+        f'{p}        input: false\n'
+        f'{p}        classes: "t-button bold white-wild-sand-text"\n'
+        f'{p}        components:\n'
+        f'{p}            UITextComponent:\n'
+        f'{p}                colorInheritType: "COLOR_IGNORE_PARENT"\n'
+        f'{p}                multiline: "MULTILINE_DISABLED"\n'
+        f'{p}                align: ["HCENTER", "VCENTER"]\n'
+        f'{p}            Anchor:\n'
+        f'{p}                leftAnchorEnabled: true\n'
+        f'{p}                rightAnchorEnabled: true\n'
+        f'{p}                topAnchorEnabled: true\n'
+        f'{p}                bottomAnchorEnabled: true\n'
+        f'{p}            SizePolicy:\n'
+        f'{p}                horizontalPolicy: "PercentOfParent"\n'
+        f'{p}                verticalPolicy: "PercentOfParent"\n'
+        f'{p}        bindings:\n'
+        f'{p}        - ["UITextComponent.text", "\\"ПЕРЕЗАПУСТИТЬ ИГРУ\\""]\n'
+    )
+
+
+def confirm_overlay() -> str:
+    """A full-screen confirmation for removal.
+
+    Placed last among the screen's children so it draws over the pages, and it
+    takes input so a stray tap cannot reach the list behind it.
+    """
+    def button(name, caption, action, left, tint):
+        p = " " * 16
+        return (
+            f'{p}-   class: "UIControl"\n'
+            f'{p}    name: "{name}"\n'
+            f'{p}    size: [200.000000, 52.000000]\n'
+            f'{p}    classes: "simple-button {tint}"\n'
+            f'{p}    components:\n'
+            f'{p}        Background: {{}}\n'
+            f'{p}        UIOpacityComponent: {{}}\n'
+            f'{p}        UIInputEventComponent:\n'
+            f'{p}            onTouchUpInside: "ON_CLICK"\n'
+            f'{p}        UIDataParamsComponent:\n'
+            f'{p}            events:\n'
+            f'{p}            - "ON_CLICK"\n'
+            f'{p}            eventActions:\n'
+            f'{p}            - ["ON_CLICK", "{action}", ""]\n'
+            f'{p}        Anchor:\n'
+            f'{p}            leftAnchorEnabled: true\n'
+            f'{p}            leftAnchor: {left:.6f}\n'
+            f'{p}            bottomAnchorEnabled: true\n'
+            f'{p}            bottomAnchor: 40.000000\n'
+            f'{p}        SizePolicy:\n'
+            f'{p}            horizontalPolicy: "FixedSize"\n'
+            f'{p}            horizontalValue: 200.000000\n'
+            f'{p}            verticalPolicy: "FixedSize"\n'
+            f'{p}            verticalValue: 52.000000\n'
+            f'{p}    children:\n'
+            f'{p}    -   class: "UIControl"\n'
+            f'{p}        name: "Caption"\n'
+            f'{p}        input: false\n'
+            f'{p}        classes: "t-button bold white-wild-sand-text"\n'
+            f'{p}        components:\n'
+            f'{p}            UITextComponent:\n'
+            f'{p}                colorInheritType: "COLOR_IGNORE_PARENT"\n'
+            f'{p}                multiline: "MULTILINE_DISABLED"\n'
+            f'{p}                align: ["HCENTER", "VCENTER"]\n'
+            f'{p}            Anchor:\n'
+            f'{p}                leftAnchorEnabled: true\n'
+            f'{p}                rightAnchorEnabled: true\n'
+            f'{p}                topAnchorEnabled: true\n'
+            f'{p}                bottomAnchorEnabled: true\n'
+            f'{p}            SizePolicy:\n'
+            f'{p}                horizontalPolicy: "PercentOfParent"\n'
+            f'{p}                verticalPolicy: "PercentOfParent"\n'
+            f'{p}        bindings:\n'
+            f'{p}        - ["UITextComponent.text", "\\"{caption}\\""]\n'
+        )
+
+    head = '''        -   class: "UIControl"
+            name: "ConfirmOverlay"
+            size: [1024.000000, 768.000000]
+            input: true
+            components:
+                Background:
+                    drawType: "DRAW_FILL"
+                    color: [0.020000, 0.030000, 0.040000, 0.880000]
+                IgnoreLayout: {}
+                Anchor:
+                    leftAnchorEnabled: true
+                    rightAnchorEnabled: true
+                    topAnchorEnabled: true
+                    bottomAnchorEnabled: true
+                SizePolicy:
+                    horizontalPolicy: "PercentOfParent"
+                    verticalPolicy: "PercentOfParent"
+            bindings:
+            - ["visible", "modConfirmVisible"]
+            children:
+            -   class: "UIControl"
+                name: "Dialog"
+                size: [520.000000, 220.000000]
+                input: false
+                classes: "grey-shark-80-bg"
+                components:
+                    Background: {}
+                    Anchor:
+                        hCenterAnchorEnabled: true
+                        vCenterAnchorEnabled: true
+                    SizePolicy:
+                        horizontalPolicy: "FixedSize"
+                        horizontalValue: 520.000000
+                        verticalPolicy: "FixedSize"
+                        verticalValue: 220.000000
+                children:
+'''
+    head += text_control("Title", "t-subtitle bold align-parent-center white-wild-sand-text",
+                         0, 40, 520, 34, "Удалить мод?", 16)
+    head += text_control("Body", "t-body regular align-parent-center white-wild-sand-70-text",
+                         0, 82, 520, 26, "Файлы клиента вернутся к исходным.", 16)
+    head += button("ConfirmRemove", "УДАЛИТЬ", "ON_MOD_REMOVE_CONFIRMED", 40.0,
+                   "red-tamarillo-bg")
+    head += button("CancelRemove", "ОТМЕНА", "ON_MOD_REMOVE_CANCELLED", 280.0,
+                   "grey-shark-60-bg")
+    return head
 
 
 # ------------------------------------------------------------- hiding the UI
@@ -733,17 +910,55 @@ action ON_MOD_CARD_CLICKED(int index)
 // do is write to the client log, which agent.py tails and acts on. The index
 // is resolved through cache/catalog_index.json, written by the same run that
 // laid these cards out, so the two cannot disagree about which mod is which.
+// A request is a sprite the client cannot find. Asking for
+// ~res:/BLITZFORGE/<verb>/<index>-<seq> makes the engine log
+//   [error] [ConvertedFileSpriteDataLoader] File "..." not found
+// and error level does reach blitz-logs_*.txt, where agent.py reads it. The
+// sequence number keeps every press a distinct path, so a repeated action is
+// not swallowed by the failed-sprite cache.
+//
+// Log() is emitted too, in case that channel turns out to work: it is the
+// cheaper of the two and costs nothing to try.
 action ON_MOD_INSTALL_CLICKED(int index)
 {
   PlaySound(sound="GUI/buttons/open");
   Log("BLITZFORGE:install:" + str(index));
+  ChangeData(modRequestVerb, 1);
+  ChangeData(modRequestIndex, index);
+  ChangeData(modRequestSeq, modRequestSeq + 1);
   ChangeData(modRequestSent, true);
 }
 
+// Removal asks first. The button only opens the confirmation.
 action ON_MOD_REMOVE_CLICKED(int index)
 {
   PlaySound(sound="GUI/buttons/open");
-  Log("BLITZFORGE:remove:" + str(index));
+  ChangeData(modRequestIndex, index);
+  ChangeData(modConfirmVisible, true);
+}
+
+action ON_MOD_REMOVE_CONFIRMED()
+{
+  PlaySound(sound="GUI/buttons/open");
+  Log("BLITZFORGE:remove:" + str(modRequestIndex));
+  ChangeData(modConfirmVisible, false);
+  ChangeData(modRequestVerb, 2);
+  ChangeData(modRequestSeq, modRequestSeq + 1);
+  ChangeData(modRequestSent, true);
+}
+
+action ON_MOD_REMOVE_CANCELLED()
+{
+  PlaySound(sound="GUI/buttons/close");
+  ChangeData(modConfirmVisible, false);
+}
+
+action ON_MOD_RESTART_CLICKED()
+{
+  PlaySound(sound="GUI/buttons/open");
+  Log("BLITZFORGE:restart:0");
+  ChangeData(modRequestVerb, 3);
+  ChangeData(modRequestSeq, modRequestSeq + 1);
   ChangeData(modRequestSent, true);
 }
 '''
@@ -772,6 +987,15 @@ def rebuild(dry_run: bool = False, source: str = "registry") -> None:
         print(screen)
         return
 
+    # agent.py sets this before relaunching, so the catalogue is already open
+    # when the hangar comes back. Consuming the flag here stops it reopening on
+    # every launch from then on.
+    flag = HERE / "cache" / "open_catalog_on_load"
+    open_on_load = "true" if flag.exists() else "false"
+    if flag.exists():
+        flag.unlink()
+        print("catalog will open on load (requested by a restart)")
+
     # start from the pristine screen every time
     subprocess.run([PYTHON, str(HERE / "patch_dvpl.py"), "extract", HANGAR_REL],
                    check=True)
@@ -787,10 +1011,14 @@ def rebuild(dry_run: bool = False, source: str = "registry") -> None:
     text = text.replace(
         LOCALS_ANCHOR,
         LOCALS_ANCHOR
-        + '            - ["bool", "modCatalogVisible", "false"]\n'
+        + f'            - ["bool", "modCatalogVisible", "{open_on_load}"]\n'
         + '            - ["bool", "modDetailVisible", "false"]\n'
         + '            - ["int", "modDetailIndex", "0"]\n'
-        + '            - ["bool", "modRequestSent", "false"]\n', 1)
+        + '            - ["bool", "modRequestSent", "false"]\n'
+        + '            - ["bool", "modConfirmVisible", "false"]\n'
+        + '            - ["int", "modRequestVerb", "0"]\n'
+        + '            - ["int", "modRequestIndex", "0"]\n'
+        + '            - ["int", "modRequestSeq", "0"]\n', 1)
     text = text.replace(BUTTON_ANCHOR, BUTTON_BLOCK, 1)
 
     for name in HIDE_WHEN_OPEN:
