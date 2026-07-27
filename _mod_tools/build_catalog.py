@@ -166,7 +166,7 @@ DETAIL_BUTTON_ANCHOR = ("leftAnchorEnabled: true",
                         "topAnchor: 80.000000")
 
 
-def install_button(indent, index=0, installed=False, transient=False,
+def install_button(indent, index=0, installed=False,
                    width=168.0, height=48.0, anchor=CARD_BUTTON_ANCHOR):
     """The anchor block is a parameter, never post-hoc string surgery.
 
@@ -183,13 +183,12 @@ def install_button(indent, index=0, installed=False, transient=False,
     tint = "red-tamarillo-bg" if installed else "green-la-palma-bg"
     caption = "УДАЛИТЬ" if installed else "УСТАНОВИТЬ"
     action = "ON_MOD_REMOVE_CLICKED" if installed else "ON_MOD_INSTALL_CLICKED"
-    # A card must always say what it is. One screen-wide modRequestSent flag was
-    # driving every card's caption, so the first press latched them all to
-    # ОТПРАВЛЕНО and the list stopped showing install state at all. Only the
-    # detail page carries the transient label, beside the hint and the restart
-    # button that explain what it means.
-    caption_binding = (f'"when modRequestSent -> \\"ОТПРАВЛЕНО\\", \\"{caption}\\""'
-                       if transient else f'"\\"{caption}\\""')
+    # Only the card that was pressed reacts. modRequestSent alone is one flag
+    # for the whole screen, so keying on it without the index latched every
+    # button at once and the list stopped showing install state entirely.
+    pressed = f"modRequestSent and modRequestIndex == {index}"
+    sent_when = pressed
+    idle_when = f"not ({pressed})"
     return (
         f'{p}-   class: "UIControl"\n'
         f'{p}    name: "InstallButton"\n'
@@ -213,8 +212,23 @@ def install_button(indent, index=0, installed=False, transient=False,
         f'{p}            verticalPolicy: "FixedSize"\n'
         f'{p}            verticalValue: {height:.6f}\n'
         f'{p}    children:\n'
+        f'{caption_control(p, "Caption", caption, idle_when)}'
+        f'{caption_control(p, "CaptionSent", "ОТПРАВЛЕНО", sent_when)}'
+    )
+
+
+def caption_control(p: str, name: str, text: str, visible: str) -> str:
+    """A button label shown only while its condition holds.
+
+    The label used to switch through a `when` expression on
+    UITextComponent.text and rendered as nothing in game - a green button with
+    no writing on it. The two states are now two controls toggled by `visible`,
+    which this screen already relies on for its pages and its overlay, so it is
+    a mechanism known to work here rather than one assumed to.
+    """
+    return (
         f'{p}    -   class: "UIControl"\n'
-        f'{p}        name: "Caption"\n'
+        f'{p}        name: "{name}"\n'
         f'{p}        input: false\n'
         f'{p}        classes: "t-button bold white-wild-sand-text"\n'
         f'{p}        components:\n'
@@ -231,7 +245,8 @@ def install_button(indent, index=0, installed=False, transient=False,
         f'{p}                horizontalPolicy: "PercentOfParent"\n'
         f'{p}                verticalPolicy: "PercentOfParent"\n'
         f'{p}        bindings:\n'
-        f'{p}        - ["UITextComponent.text", {caption_binding}]\n'
+        f'{p}        - ["visible", "{visible}"]\n'
+        f'{p}        - ["UITextComponent.text", "\\"{text}\\""]\n'
     )
 
 
@@ -510,7 +525,7 @@ def detail_page(mod: dict, index: int) -> str:
                            168, 40, 600, 26, detail_stats, 12)
     detail += install_button(12, index=index,
                              installed=mod["installed"] == "true",
-                             transient=True,
+
                              width=200.0, height=52.0,
                              anchor=DETAIL_BUTTON_ANCHOR)
     long_text = mod["long"].replace("\n", "\\n")
