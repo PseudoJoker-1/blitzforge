@@ -5,7 +5,8 @@ Hangar.yaml out of backup/, splices a freshly generated ModCatalogScreen into
 it, and installs the result. Nothing is patched on top of a previous patch, so
 a broken run can never accumulate.
 
-    python build_catalog.py            # rebuild and install
+    python build_catalog.py            # rebuild from the registry and install
+    python build_catalog.py --local    # use _mod_tools/mods/*/manifest.yaml instead
     python build_catalog.py --dry-run  # print the generated screen only
 
 Mods live in _mod_tools/mods/<id>/manifest.yaml:
@@ -73,7 +74,35 @@ def read_manifest(path: Path) -> dict:
     return data
 
 
-def load_mods() -> list[dict]:
+def load_mods(source: str = "registry") -> list[dict]:
+    """Mod metadata for the catalogue screen.
+
+    The registry is the real source; local manifests stay available for
+    authoring a mod before it has been published. registry.fetch already falls
+    back to its disk cache, so a server outage degrades to stale data rather
+    than an empty hangar.
+    """
+    if source == "registry":
+        import registry as registry_client
+        import install as installer
+
+        entries, origin = registry_client.fetch()
+        print(f"registry: {origin}")
+        ledger = installer.load_ledger()
+        mods = []
+        for entry in entries:
+            mod = {key: str(entry.get(key, "")) for key in
+                   ("id", "name", "version", "author", "description",
+                    "long", "type", "downloads", "updated")}
+            mod["long"] = mod["long"] or mod["description"]
+            mod["installed"] = "true" if entry["id"] in ledger else "false"
+            mods.append(mod)
+        return mods
+
+    return load_local_mods()
+
+
+def load_local_mods() -> list[dict]:
     if not MODS.exists():
         return []
     mods = []
@@ -685,9 +714,9 @@ def rebuild_actions() -> None:
                    check=True)
 
 
-def rebuild(dry_run: bool = False) -> None:
-    mods = load_mods()
-    print(f"manifests found: {len(mods)}")
+def rebuild(dry_run: bool = False, source: str = "registry") -> None:
+    mods = load_mods(source)
+    print(f"mods: {len(mods)}")
     for m in mods:
         print(f"   {m['id']:16} {m['name']}  ({m['type']})")
 
@@ -730,4 +759,5 @@ def rebuild(dry_run: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    rebuild(dry_run="--dry-run" in sys.argv)
+    rebuild(dry_run="--dry-run" in sys.argv,
+            source="local" if "--local" in sys.argv else "registry")

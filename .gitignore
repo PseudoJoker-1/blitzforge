@@ -30,3 +30,15 @@ _mod_tools/offset_scan.ps1
 # Vercel
 .vercel/
 node_modules/
+
+# Registry cache, downloaded artifacts and the local install ledger.
+# All of it is per-machine state, rebuilt on demand.
+_mod_tools/cache/
+_mod_tools/dist/
+
+# A mod's build input: the client file with the author's edits already in it.
+#
+# This is a whole copy of Wargaming's file, so it cannot be published even
+# though the artifact built from it can be - the artifact holds only the diff.
+# Authors keep this tree locally; what ships is the manifest and the zip.
+_mod_tools/mods/*/patched/

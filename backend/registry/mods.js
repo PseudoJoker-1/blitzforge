@@ -26,7 +26,11 @@ export default {
         "reviewer": "pseud",
         "note": "Grade is applied uniformly to every surface, so nothing becomes easier to see than vanilla."
       },
-      "artifact": null
+      "artifact": {
+        "url": "https://backend-pseudojoker-1s-projects.vercel.app/artifacts/night-mode-1.2.0.zip",
+        "sha256": "79d1178f563276b397d06ff4428daeec0b484c4865888f133d0306bd30ae8977",
+        "size": 2573
+      }
     },
     {
       "id": "wet-surfaces",
@@ -43,7 +47,11 @@ export default {
         "reviewer": "pseud",
         "note": "Purely a material response change; no visibility advantage."
       },
-      "artifact": null
+      "artifact": {
+        "url": "https://backend-pseudojoker-1s-projects.vercel.app/artifacts/wet-surfaces-0.9.0.zip",
+        "sha256": "121a9d89189dfb5687a41cbb3fcbc97e279d4f555461fd5de7127e205ebe05d5",
+        "size": 2117
+      }
     },
     {
       "id": "screen-rain",

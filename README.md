@@ -14,6 +14,9 @@ catalogue screen and the registry API; installation is not wired up yet.
 | `_mod_tools/build_catalog.py` | Generates the in-game catalogue screen from mod metadata and splices it into the hangar |
 | `_mod_tools/patch_dvpl.py` | Edits `.dvpl` client resources with a one-time backup, so any change can be rolled back |
 | `_mod_tools/dvpl.py` | `.dvpl` container reader/writer (LZ4 payload plus a 20-byte footer) |
+| `_mod_tools/registry.py` | Registry client, with a disk cache so an outage cannot empty the hangar |
+| `_mod_tools/modpack.py` | The artifact format: build, inspect, apply |
+| `_mod_tools/install.py` | Install and remove mods from the registry |
 | `_mod_tools/mod_api/` | C ABI and runtime core for native mods: lifecycle, per-mod config, resource mounting, crash isolation |
 | `_mod_tools/proxy_dll/` | `version.dll` proxy that injects the loader into the game |
 | `backend/` | The mod registry API, deployed on Vercel |
@@ -33,6 +36,41 @@ Every run starts from the pristine `Hangar.yaml` in the backup directory, so a
 patch is never applied on top of a previous patch. Generated markup is checked
 for structural damage before installation — the client gives no parse
 diagnostics, a malformed screen is simply a crash on load.
+
+## The artifact format
+
+An artifact is a zip holding `blitzforge.json`, unified diffs under `patches/`,
+and whole files under `files/`.
+
+Two rules shape it.
+
+**Patches carry no original content.** Diffs are generated with zero context
+lines, so a patch holds only the lines the author adds and removes. A mod that
+edits a shader ships its own thirty lines, not a copy of Wargaming's file. The
+two sample artifacts quote zero original lines between them.
+
+**A patch names the file it was built against.** Each one records the sha256 of
+the pristine original and of the expected result. Applying to a client whose
+file has changed — a game update, another mod — fails with both hashes rather
+than producing something that is neither.
+
+That hash is load-bearing rather than advisory. A diff that only inserts names
+no existing line, so it has nothing to compare and will apply anywhere,
+including at the wrong offset if the file has moved. Removals and replacements
+are checked line by line; insertions are covered by the hash alone.
+
+```
+python _mod_tools/modpack.py build   mods/night-mode dist/night-mode-1.2.0.zip
+python _mod_tools/modpack.py inspect dist/night-mode-1.2.0.zip
+python _mod_tools/install.py install night-mode
+python _mod_tools/install.py remove  night-mode
+python _mod_tools/test_modpack.py    # round-trips the diff engine on real client files
+```
+
+Installing records which mod owns which file. Patches are built against the
+pristine original, so two mods editing the same resource cannot both apply —
+the second would be diffed against stock and would quietly erase the first.
+That case is refused, not resolved.
 
 ## Review policy
 
