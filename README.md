@@ -17,6 +17,7 @@ catalogue screen and the registry API; installation is not wired up yet.
 | `_mod_tools/registry.py` | Registry client, with a disk cache so an outage cannot empty the hangar |
 | `_mod_tools/modpack.py` | The artifact format: build, inspect, apply |
 | `_mod_tools/install.py` | Install and remove mods from the registry |
+| `_mod_tools/agent.py` | Carries out install and remove requests made from inside the game |
 | `_mod_tools/mod_api/` | C ABI and runtime core for native mods: lifecycle, per-mod config, resource mounting, crash isolation |
 | `_mod_tools/proxy_dll/` | `version.dll` proxy that injects the loader into the game |
 | `backend/` | The mod registry API, deployed on Vercel |
@@ -71,6 +72,32 @@ Installing records which mod owns which file. Patches are built against the
 pristine original, so two mods editing the same resource cannot both apply —
 the second would be diffed against stock and would quietly erase the first.
 That case is refused, not resolved.
+
+## How a button in the hangar installs a mod
+
+The actions language the catalogue is written in has 47 statement functions and
+every one of them is UI or animation. There is no file access, no network call,
+no way to open a URL. A button therefore cannot run the installer itself.
+
+What it can do is write to the client log, which `agent.py` tails:
+
+```
+button  ->  Log("BLITZFORGE:install:" + str(index))
+agent   ->  reads the line, maps the index to a mod id, runs the installer
+```
+
+The index is what the button has; `cache/catalog_index.json` maps it back to an
+id and is written by the same `build_catalog` run that laid the cards out, so
+the two cannot disagree about which card is which mod.
+
+```
+python _mod_tools/agent.py           # follow the log and act on requests
+python _mod_tools/agent.py --probe   # check whether the log channel works
+```
+
+Resource patches change files the client reads at startup, so a press cannot
+take effect in the running session. The detail page says so rather than
+implying the mod is live.
 
 ## Review policy
 

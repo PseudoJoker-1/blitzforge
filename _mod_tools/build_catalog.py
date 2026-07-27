@@ -24,6 +24,7 @@ Mods live in _mod_tools/mods/<id>/manifest.yaml:
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -176,10 +177,12 @@ def install_button(indent, index=0, installed=False,
     """
     p = " " * indent
     anchor_block = "".join(f'{p}            {line}\n' for line in anchor)
-    # Driven by the manifest today, by WotbModPublicInfo.enabled once the
-    # loader is bridged in — same two states either way.
-    tint = "grey-shark-60-bg" if installed else "green-la-palma-bg"
-    caption = "УСТАНОВЛЕН" if installed else "УСТАНОВИТЬ"
+    # One button, two jobs. An installed mod's only useful action is removal,
+    # so the button becomes it rather than sitting there greyed out next to a
+    # second control the user has to hunt for.
+    tint = "red-tamarillo-bg" if installed else "green-la-palma-bg"
+    caption = "УДАЛИТЬ" if installed else "УСТАНОВИТЬ"
+    action = "ON_MOD_REMOVE_CLICKED" if installed else "ON_MOD_INSTALL_CLICKED"
     return (
         f'{p}-   class: "UIControl"\n'
         f'{p}    name: "InstallButton"\n'
@@ -194,7 +197,7 @@ def install_button(indent, index=0, installed=False,
         f'{p}            events:\n'
         f'{p}            - "ON_CLICK"\n'
         f'{p}            eventActions:\n'
-        f'{p}            - ["ON_CLICK", "ON_MOD_INSTALL_CLICKED", "{index}"]\n'
+        f'{p}            - ["ON_CLICK", "{action}", "{index}"]\n'
         f'{p}        Anchor:\n'
         f'{anchor_block}'
         f'{p}        SizePolicy:\n'
@@ -507,6 +510,34 @@ def detail_page(mod: dict, index: int) -> str:
         '                bindings:\n'
         f'                - ["UITextComponent.text", "\\"{esc(long_text)}\\""]\n'
     )
+    # Resource patches are applied to files the client reads at startup, so a
+    # button press cannot take effect in the running session. Saying so is the
+    # difference between a working feature and one that looks broken.
+    detail += (
+        '            -   class: "UIControl"\n'
+        '                name: "RestartHint"\n'
+        '                size: [880.000000, 28.000000]\n'
+        '                input: false\n'
+        '                classes: "t-caption regular align-left orange-tango-text"\n'
+        '                components:\n'
+        '                    UITextComponent:\n'
+        '                        colorInheritType: "COLOR_IGNORE_PARENT"\n'
+        '                        multiline: "MULTILINE_DISABLED"\n'
+        '                    Anchor:\n'
+        '                        leftAnchorEnabled: true\n'
+        '                        leftAnchor: 168.000000\n'
+        '                        topAnchorEnabled: true\n'
+        '                        topAnchor: 140.000000\n'
+        '                    SizePolicy:\n'
+        '                        horizontalPolicy: "FixedSize"\n'
+        '                        horizontalValue: 880.000000\n'
+        '                        verticalPolicy: "FixedSize"\n'
+        '                        verticalValue: 28.000000\n'
+        '                bindings:\n'
+        '                - ["visible", "modRequestSent"]\n'
+        '                - ["UITextComponent.text", '
+        '"\\"Команда отправлена. Перезапустите игру, чтобы применить.\\""]\n'
+    )
     return detail
 
 
@@ -666,6 +697,7 @@ action ON_MOD_CATALOG_CLICKED()
   {
     ChangeData(modCatalogVisible, true);
     ChangeData(modDetailVisible, false);
+    ChangeData(modRequestSent, false);
     Event("PAUSE_HANGAR_SCENE", arg1=true);
     // Same blur the stock screens fade the hangar out with.
     RenderPostProcess("**/FadedBlur/BlurAndFade/Blur", force=true);
@@ -692,12 +724,27 @@ action ON_MOD_CARD_CLICKED(int index)
 {
   PlaySound(sound="GUI/buttons/open");
   ChangeData(modDetailIndex, index);
+  ChangeData(modRequestSent, false);
   ChangeData(modDetailVisible, true);
 }
 
+// The actions language has no file or network access - its whole vocabulary is
+// UI and animation - so a button cannot run the installer itself. What it can
+// do is write to the client log, which agent.py tails and acts on. The index
+// is resolved through cache/catalog_index.json, written by the same run that
+// laid these cards out, so the two cannot disagree about which mod is which.
 action ON_MOD_INSTALL_CLICKED(int index)
 {
   PlaySound(sound="GUI/buttons/open");
+  Log("BLITZFORGE:install:" + str(index));
+  ChangeData(modRequestSent, true);
+}
+
+action ON_MOD_REMOVE_CLICKED(int index)
+{
+  PlaySound(sound="GUI/buttons/open");
+  Log("BLITZFORGE:remove:" + str(index));
+  ChangeData(modRequestSent, true);
 }
 '''
 
@@ -742,13 +789,20 @@ def rebuild(dry_run: bool = False, source: str = "registry") -> None:
         LOCALS_ANCHOR
         + '            - ["bool", "modCatalogVisible", "false"]\n'
         + '            - ["bool", "modDetailVisible", "false"]\n'
-        + '            - ["int", "modDetailIndex", "0"]\n', 1)
+        + '            - ["int", "modDetailIndex", "0"]\n'
+        + '            - ["bool", "modRequestSent", "false"]\n', 1)
     text = text.replace(BUTTON_ANCHOR, BUTTON_BLOCK, 1)
 
     for name in HIDE_WHEN_OPEN:
         text = add_visible_binding(text, name, "not modCatalogVisible")
 
     text = text.replace("Slots:", screen + "Slots:", 1)
+
+    # The card order is the contract between the buttons and agent.py: the
+    # button only knows its index, and this is what turns it back into an id.
+    (HERE / "cache").mkdir(parents=True, exist_ok=True)
+    (HERE / "cache" / "catalog_index.json").write_text(
+        json.dumps({"order": [m["id"] for m in mods]}, indent=2), encoding="utf-8")
 
     validate(text)          # never install a screen the game would die on
     src.write_text(text, encoding="utf-8")
