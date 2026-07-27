@@ -166,7 +166,7 @@ DETAIL_BUTTON_ANCHOR = ("leftAnchorEnabled: true",
                         "topAnchor: 80.000000")
 
 
-def install_button(indent, index=0, installed=False,
+def install_button(indent, index=0, installed=False, sent_expr=None,
                    width=168.0, height=48.0, anchor=CARD_BUTTON_ANCHOR):
     """The anchor block is a parameter, never post-hoc string surgery.
 
@@ -193,7 +193,7 @@ def install_button(indent, index=0, installed=False,
     # `when` on the text and a `visible` binding silently did nothing while a
     # plain literal drew fine. A declared param with an arg is how the game
     # itself passes a value across that boundary.
-    pressed = f"modRequestSent and modRequestIndex == {index}"
+    pressed = sent_expr or f"modRequestSent and modRequestIndex == {index}"
     return (
         f'{p}-   class: "UIControl"\n'
         f'{p}    name: "InstallButton"\n'
@@ -273,6 +273,14 @@ def card(mod: dict, index: int, indent: int = CARD_INDENT) -> str:
         f'{p}        UIInputEventComponent:\n'
         f'{p}            onTouchUpInside: "ON_CLICK"\n'
         f'{p}        UIDataParamsComponent:\n'
+        # The card opens a data scope of its own, so the button inside it
+        # cannot reach modRequestSent either - and an arg on the button is
+        # evaluated here, in this scope, not at the screen. The value has to be
+        # carried across both boundaries, one hop at a time.
+        f'{p}            params:\n'
+        f'{p}            - ["bool", "sent", "false", "false"]\n'
+        f'{p}            args:\n'
+        f'{p}                "sent": "modRequestSent and modRequestIndex == {index}"\n'
         f'{p}            events:\n'
         f'{p}            - "ON_CLICK"\n'
         f'{p}            eventActions:\n'
@@ -309,7 +317,8 @@ def card(mod: dict, index: int, indent: int = CARD_INDENT) -> str:
     out += text_control("Description", "t-body regular align-left white-wild-sand-70-text",
                         120, 76, 560, 24, mod["description"], indent + 4)
     out += install_button(indent + 4, index=index,
-                          installed=mod["installed"] == "true")
+                          installed=mod["installed"] == "true",
+                          sent_expr="sent")
     return out
 
 
@@ -476,7 +485,7 @@ def build_screen(mods: list[dict]) -> str:
 {cards}'''
 
     pages = "".join(detail_page(m, i) for i, m in enumerate(mods))
-    return head + pages + confirm_overlay()
+    return head + pages + restart_bar() + confirm_overlay()
 
 
 def detail_page(mod: dict, index: int) -> str:
@@ -588,8 +597,40 @@ def detail_page(mod: dict, index: int) -> str:
         '                - ["UITextComponent.text", '
         '"\\"Команда отправлена. Изменения применятся после перезапуска.\\""]\n'
     )
-    detail += restart_button(12)
     return detail
+
+
+def restart_bar() -> str:
+    """Sits on the catalogue screen, not on a mod's page.
+
+    A restart applies whatever has been queued, not one mod, so it belongs
+    to the screen. The wrapper carries the visibility condition: it holds no
+    UIDataParamsComponent, so the screen's variables are in scope there,
+    while inside the button they would not be.
+    """
+    p = " " * 8
+    wrapper = (
+        f'{p}-   class: "UIControl"\n'
+        f'{p}    name: "RestartBar"\n'
+        f'{p}    size: [300.000000, 56.000000]\n'
+        f'{p}    input: false\n'
+        f'{p}    components:\n'
+        f'{p}        IgnoreLayout: {{}}\n'
+        f'{p}        Anchor:\n'
+        f'{p}            rightAnchorEnabled: true\n'
+        f'{p}            rightAnchor: 40.000000\n'
+        f'{p}            bottomAnchorEnabled: true\n'
+        f'{p}            bottomAnchor: 28.000000\n'
+        f'{p}        SizePolicy:\n'
+        f'{p}            horizontalPolicy: "FixedSize"\n'
+        f'{p}            horizontalValue: 300.000000\n'
+        f'{p}            verticalPolicy: "FixedSize"\n'
+        f'{p}            verticalValue: 56.000000\n'
+        f'{p}    bindings:\n'
+        f'{p}    - ["visible", "modRequestSent"]\n'
+        f'{p}    children:\n'
+    )
+    return wrapper + restart_button(12)
 
 
 def restart_button(indent: int) -> str:
@@ -613,16 +654,12 @@ def restart_button(indent: int) -> str:
         f'{p}            - ["ON_CLICK", "ON_MOD_RESTART_CLICKED", ""]\n'
         f'{p}        Anchor:\n'
         f'{p}            leftAnchorEnabled: true\n'
-        f'{p}            leftAnchor: 392.000000\n'
+        f'{p}            rightAnchorEnabled: true\n'
         f'{p}            topAnchorEnabled: true\n'
-        f'{p}            topAnchor: 80.000000\n'
+        f'{p}            bottomAnchorEnabled: true\n'
         f'{p}        SizePolicy:\n'
-        f'{p}            horizontalPolicy: "FixedSize"\n'
-        f'{p}            horizontalValue: 260.000000\n'
-        f'{p}            verticalPolicy: "FixedSize"\n'
-        f'{p}            verticalValue: 52.000000\n'
-        f'{p}    bindings:\n'
-        f'{p}    - ["visible", "modRequestSent"]\n'
+        f'{p}            horizontalPolicy: "PercentOfParent"\n'
+        f'{p}            verticalPolicy: "PercentOfParent"\n'
         f'{p}    children:\n'
         f'{p}    -   class: "UIControl"\n'
         f'{p}        name: "Caption"\n'
