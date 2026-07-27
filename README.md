@@ -105,9 +105,13 @@ index back to a mod id and is written by the same `build_catalog` run that
 ordered the cards, so the two cannot disagree.
 
 ```
-python _mod_tools/agent.py           # follow the log and act on requests
+_mod_tools\start_agent.cmd           # keep this open while using the catalogue
 python _mod_tools/agent.py --probe   # report which channel is arriving
 ```
+
+**The agent has to be running.** Without it the buttons still light up and
+still write their request, and nothing happens - the request simply sits in
+the log unread.
 
 Removal asks for confirmation first. A button that has been pressed reads
 ОТПРАВЛЕНО, and a restart button appears: resource patches change files the

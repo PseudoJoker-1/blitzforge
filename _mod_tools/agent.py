@@ -113,6 +113,13 @@ def handle(verb: str, index: int) -> None:
         # A refused install is a normal outcome - a hash mismatch, a conflict -
         # and must not take the agent down with it.
         print(f"  refused: {' '.join(str(error).split())}")
+        return
+
+    # The card captions come from the ledger, so the screen has to be rebuilt
+    # or the button still offers the action that was just carried out.
+    subprocess.run([sys.executable, str(HERE / "build_catalog.py")],
+                   capture_output=True, check=False)
+    print("  catalogue rebuilt; the new state shows after a restart")
 
 
 def scan(path: Path, offset: int, act: bool = True) -> tuple[int, int]:

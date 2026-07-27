@@ -166,7 +166,7 @@ DETAIL_BUTTON_ANCHOR = ("leftAnchorEnabled: true",
                         "topAnchor: 80.000000")
 
 
-def install_button(indent, index=0, installed=False,
+def install_button(indent, index=0, installed=False, transient=False,
                    width=168.0, height=48.0, anchor=CARD_BUTTON_ANCHOR):
     """The anchor block is a parameter, never post-hoc string surgery.
 
@@ -183,6 +183,13 @@ def install_button(indent, index=0, installed=False,
     tint = "red-tamarillo-bg" if installed else "green-la-palma-bg"
     caption = "УДАЛИТЬ" if installed else "УСТАНОВИТЬ"
     action = "ON_MOD_REMOVE_CLICKED" if installed else "ON_MOD_INSTALL_CLICKED"
+    # A card must always say what it is. One screen-wide modRequestSent flag was
+    # driving every card's caption, so the first press latched them all to
+    # ОТПРАВЛЕНО and the list stopped showing install state at all. Only the
+    # detail page carries the transient label, beside the hint and the restart
+    # button that explain what it means.
+    caption_binding = (f'"when modRequestSent -> \\"ОТПРАВЛЕНО\\", \\"{caption}\\""'
+                       if transient else f'"\\"{caption}\\""')
     return (
         f'{p}-   class: "UIControl"\n'
         f'{p}    name: "InstallButton"\n'
@@ -224,8 +231,7 @@ def install_button(indent, index=0, installed=False,
         f'{p}                horizontalPolicy: "PercentOfParent"\n'
         f'{p}                verticalPolicy: "PercentOfParent"\n'
         f'{p}        bindings:\n'
-        f'{p}        - ["UITextComponent.text", "when modRequestSent and '
-        f'modRequestIndex == {index} -> \\"ОТПРАВЛЕНО\\", \\"{caption}\\""]\n'
+        f'{p}        - ["UITextComponent.text", {caption_binding}]\n'
     )
 
 
@@ -504,6 +510,7 @@ def detail_page(mod: dict, index: int) -> str:
                            168, 40, 600, 26, detail_stats, 12)
     detail += install_button(12, index=index,
                              installed=mod["installed"] == "true",
+                             transient=True,
                              width=200.0, height=52.0,
                              anchor=DETAIL_BUTTON_ANCHOR)
     long_text = mod["long"].replace("\n", "\\n")
@@ -890,6 +897,7 @@ action ON_MOD_CATALOG_BACK()
   if (modDetailVisible)
   {
     ChangeData(modDetailVisible, false);
+    ChangeData(modRequestSent, false);
   }
   else
   {
