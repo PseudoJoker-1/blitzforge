@@ -5,9 +5,13 @@ access - its whole vocabulary is UI and animation - so the buttons cannot run
 the installer themselves. What they can do is write a line to the client log.
 This tails that log and carries the request out.
 
-    python agent.py            # follow the log and act on requests
-    python agent.py --once     # process what is already there and exit
-    python agent.py --probe    # report whether the log channel works at all
+    python agent.py             # follow the log and act on requests
+    python agent.py --once      # process what is already there and exit
+    python agent.py --probe     # report which channel is arriving
+    python agent.py --autostart # start it now and register it with Windows
+
+build_catalog.py calls --autostart for you, so there is nothing to launch by
+hand.
 
 A request names a card index rather than a mod id, because the index is what
 the button has. cache/catalog_index.json maps it back, and is written by the
@@ -16,6 +20,7 @@ same build_catalog run that laid the cards out, so the two cannot disagree.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -42,6 +47,62 @@ POLL_SECONDS = 2
 
 STEAM_APP_ID = "444200"
 OPEN_ON_LOAD = HERE / "cache" / "open_catalog_on_load"
+
+
+PID_FILE = HERE / "cache" / "agent.pid"
+STARTUP = (Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows"
+           / "Start Menu" / "Programs" / "Startup" / "blitzforge-agent.vbs")
+
+
+def _is_running(pid: int) -> bool:
+    result = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                            capture_output=True, text=True, check=False)
+    return str(pid) in result.stdout
+
+
+def already_running() -> bool:
+    if not PID_FILE.exists():
+        return False
+    try:
+        return _is_running(int(PID_FILE.read_text(encoding="utf-8").strip()))
+    except (OSError, ValueError):
+        return False
+
+
+def claim_pid() -> None:
+    PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+
+
+def _pythonw() -> str:
+    """pythonw runs without a console window, so the agent stays out of sight."""
+    candidate = Path(sys.executable).with_name("pythonw.exe")
+    return str(candidate) if candidate.exists() else sys.executable
+
+
+def ensure_autostart() -> None:
+    """Start the agent now if it is not up, and arrange for it to start with
+    Windows.
+
+    Nothing about the catalogue works without the agent: the buttons still
+    light up and still write their request, and it sits in the log unread.
+    Leaving that to a batch file the user has to remember made a working
+    feature look broken, so it is set up as a side effect of building the
+    screen instead.
+    """
+    script = f'''Set s = CreateObject("WScript.Shell")
+s.Run """{_pythonw()}"" ""{HERE / 'agent.py'}""", 0, False
+'''
+    STARTUP.parent.mkdir(parents=True, exist_ok=True)
+    if not STARTUP.exists() or STARTUP.read_text(encoding="utf-8") != script:
+        STARTUP.write_text(script, encoding="utf-8")
+        print(f"agent registered to start with Windows: {STARTUP.name}")
+
+    if already_running():
+        return
+    subprocess.Popen([_pythonw(), str(HERE / "agent.py")],
+                     creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+    print("agent started in the background")
 
 
 def newest_log() -> Path | None:
@@ -166,6 +227,14 @@ def probe() -> int:
 def main() -> None:
     if "--probe" in sys.argv:
         sys.exit(probe())
+    if "--autostart" in sys.argv:
+        ensure_autostart()
+        return
+
+    if already_running():
+        print("another agent is already watching; exiting")
+        return
+    claim_pid()
 
     state = load_state()
     once = "--once" in sys.argv

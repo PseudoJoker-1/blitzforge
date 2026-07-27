@@ -180,8 +180,6 @@ def install_button(indent, index=0, installed=False, sent_expr=None,
     # One button, two jobs. An installed mod's only useful action is removal,
     # so the button becomes it rather than sitting there greyed out next to a
     # second control the user has to hunt for.
-    tint = "red-tamarillo-bg" if installed else "green-la-palma-bg"
-    caption = "УДАЛИТЬ" if installed else "УСТАНОВИТЬ"
     action = "ON_MOD_REMOVE_CLICKED" if installed else "ON_MOD_INSTALL_CLICKED"
     # Only the card that was pressed reacts. modRequestSent alone is one flag
     # for the whole screen, so keying on it without the index latched every
@@ -193,22 +191,21 @@ def install_button(indent, index=0, installed=False, sent_expr=None,
     # `when` on the text and a `visible` binding silently did nothing while a
     # plain literal drew fine. A declared param with an arg is how the game
     # itself passes a value across that boundary.
-    pressed = sent_expr or f"modRequestSent and modRequestIndex == {index}"
+    shown = sent_expr or state_expression(index, installed)
     return (
         f'{p}-   class: "UIControl"\n'
         f'{p}    name: "InstallButton"\n'
         f'{p}    size: [{width:.6f}, {height:.6f}]\n'
-        f'{p}    classes: "simple-button {tint}"\n'
+        f'{p}    classes: "simple-button"\n'
         f'{p}    components:\n'
-        f'{p}        Background: {{}}\n'
         f'{p}        UIOpacityComponent: {{}}\n'
         f'{p}        UIInputEventComponent:\n'
         f'{p}            onTouchUpInside: "ON_CLICK"\n'
         f'{p}        UIDataParamsComponent:\n'
         f'{p}            params:\n'
-        f'{p}            - ["bool", "sent", "false", "false"]\n'
+        f'{p}            - ["bool", "shown", "false", "false"]\n'
         f'{p}            args:\n'
-        f'{p}                "sent": "{pressed}"\n'
+        f'{p}                "shown": "{shown}"\n'
         f'{p}            events:\n'
         f'{p}            - "ON_CLICK"\n'
         f'{p}            eventActions:\n'
@@ -221,13 +218,31 @@ def install_button(indent, index=0, installed=False, sent_expr=None,
         f'{p}            verticalPolicy: "FixedSize"\n'
         f'{p}            verticalValue: {height:.6f}\n'
         f'{p}    children:\n'
-        f'{caption_control(p, "Caption", caption, "not sent")}'
-        f'{caption_control(p, "CaptionSent", "ОТПРАВЛЕНО", "sent")}'
+        f'{caption_control(p, "FaceInstall", "green-la-palma-bg", "УСТАНОВИТЬ", "not shown")}'
+        f'{caption_control(p, "FaceRemove", "red-tamarillo-bg", "УДАЛИТЬ", "shown")}'
     )
 
 
-def caption_control(p: str, name: str, text: str, visible: str) -> str:
-    """A button label shown only while its condition holds.
+def state_expression(index: int, installed: bool) -> str:
+    """Whether the mod reads as installed right now, pending action included.
+
+    Until the client restarts the ledger cannot change, so the button has to
+    show the state the press will produce rather than the one on disk. `shown`
+    is the state after the pending request, falling back to the built-in one
+    when this card has no request outstanding.
+    """
+    touched = f"modRequestSent and modRequestIndex == {index}"
+    if installed:
+        return f"not ({touched}) or modPendingInstalled"
+    return f"{touched} and modPendingInstalled"
+
+
+def caption_control(p: str, name: str, tint: str, text: str, visible: str) -> str:
+    """One of the button's two faces: its own colour and its own label.
+
+    The colour has to change with the state as well as the text, and a control
+    only carries one set of classes, so each state is a full-size face of its
+    own and `visible` picks between them.
 
     The label used to switch through a `when` expression on
     UITextComponent.text and rendered as nothing in game - a green button with
@@ -239,8 +254,9 @@ def caption_control(p: str, name: str, text: str, visible: str) -> str:
         f'{p}    -   class: "UIControl"\n'
         f'{p}        name: "{name}"\n'
         f'{p}        input: false\n'
-        f'{p}        classes: "t-button bold white-wild-sand-text"\n'
+        f'{p}        classes: "t-button bold white-wild-sand-text {tint}"\n'
         f'{p}        components:\n'
+        f'{p}            Background: {{}}\n'
         f'{p}            UITextComponent:\n'
         f'{p}                colorInheritType: "COLOR_IGNORE_PARENT"\n'
         f'{p}                multiline: "MULTILINE_DISABLED"\n'
@@ -278,9 +294,9 @@ def card(mod: dict, index: int, indent: int = CARD_INDENT) -> str:
         # evaluated here, in this scope, not at the screen. The value has to be
         # carried across both boundaries, one hop at a time.
         f'{p}            params:\n'
-        f'{p}            - ["bool", "sent", "false", "false"]\n'
+        f'{p}            - ["bool", "shown", "false", "false"]\n'
         f'{p}            args:\n'
-        f'{p}                "sent": "modRequestSent and modRequestIndex == {index}"\n'
+        f'{p}                "shown": "{state_expression(index, mod["installed"] == "true")}"\n'
         f'{p}            events:\n'
         f'{p}            - "ON_CLICK"\n'
         f'{p}            eventActions:\n'
@@ -318,7 +334,7 @@ def card(mod: dict, index: int, indent: int = CARD_INDENT) -> str:
                         120, 76, 560, 24, mod["description"], indent + 4)
     out += install_button(indent + 4, index=index,
                           installed=mod["installed"] == "true",
-                          sent_expr="sent")
+                          sent_expr="shown")
     return out
 
 
@@ -461,6 +477,7 @@ def build_screen(mods: list[dict]) -> str:
                     verticalPolicy: "PercentOfParent"
             bindings:
             - ["visible", "not modDetailVisible"]
+            - ["Anchor.topAnchor", "when modRequestSent -> 176, 104"]
             children:
             -   class: "UIScrollView"
                 name: "ModScroll"
@@ -517,6 +534,7 @@ def detail_page(mod: dict, index: int) -> str:
                     verticalPolicy: "PercentOfParent"
             bindings:
             - ["visible", "modDetailVisible and modDetailIndex == {index}"]
+            - ["Anchor.topAnchor", "when modRequestSent -> 176, 104"]
             children:
             -   class: "UIControl"
                 name: "DetailIcon"
@@ -612,20 +630,21 @@ def restart_bar() -> str:
     wrapper = (
         f'{p}-   class: "UIControl"\n'
         f'{p}    name: "RestartBar"\n'
-        f'{p}    size: [300.000000, 56.000000]\n'
+        f'{p}    size: [944.000000, 64.000000]\n'
         f'{p}    input: false\n'
         f'{p}    components:\n'
         f'{p}        IgnoreLayout: {{}}\n'
         f'{p}        Anchor:\n'
+        f'{p}            leftAnchorEnabled: true\n'
+        f'{p}            leftAnchor: 40.000000\n'
         f'{p}            rightAnchorEnabled: true\n'
         f'{p}            rightAnchor: 40.000000\n'
-        f'{p}            bottomAnchorEnabled: true\n'
-        f'{p}            bottomAnchor: 28.000000\n'
+        f'{p}            topAnchorEnabled: true\n'
+        f'{p}            topAnchor: 96.000000\n'
         f'{p}        SizePolicy:\n'
-        f'{p}            horizontalPolicy: "FixedSize"\n'
-        f'{p}            horizontalValue: 300.000000\n'
+        f'{p}            horizontalPolicy: "PercentOfParent"\n'
         f'{p}            verticalPolicy: "FixedSize"\n'
-        f'{p}            verticalValue: 56.000000\n'
+        f'{p}            verticalValue: 64.000000\n'
         f'{p}    bindings:\n'
         f'{p}    - ["visible", "modRequestSent"]\n'
         f'{p}    children:\n'
@@ -641,7 +660,7 @@ def restart_button(indent: int) -> str:
         f'{p}-   class: "UIControl"\n'
         f'{p}    name: "RestartButton"\n'
         f'{p}    size: [260.000000, 52.000000]\n'
-        f'{p}    classes: "simple-button grey-shark-60-bg"\n'
+        f'{p}    classes: "simple-button orange-tango-bg"\n'
         f'{p}    components:\n'
         f'{p}        Background: {{}}\n'
         f'{p}        UIOpacityComponent: {{}}\n'
@@ -679,7 +698,7 @@ def restart_button(indent: int) -> str:
         f'{p}                horizontalPolicy: "PercentOfParent"\n'
         f'{p}                verticalPolicy: "PercentOfParent"\n'
         f'{p}        bindings:\n'
-        f'{p}        - ["UITextComponent.text", "\\"ПЕРЕЗАПУСТИТЬ ИГРУ\\""]\n'
+        f'{p}        - ["UITextComponent.text", "\\"ПЕРЕЗАПУСТИТЬ ИГРУ И ПРИМЕНИТЬ\\""]\n'
     )
 
 
@@ -988,22 +1007,49 @@ action ON_MOD_CARD_CLICKED(int index)
 //
 // Log() is emitted too, in case that channel turns out to work: it is the
 // cheaper of the two and costs nothing to try.
+// Which action a button carries is fixed when the screen is built, from the
+// ledger, but the button flips as soon as it is pressed - so a second press
+// has to mean the opposite of the first. modPendingInstalled holds the state
+// the pending request will produce, and these two branches read it back.
+//
+// This one is attached to a mod that was not installed when the screen was
+// built, so it reads УСТАНОВИТЬ until pressed.
 action ON_MOD_INSTALL_CLICKED(int index)
 {
-  PlaySound(sound="GUI/buttons/open");
-  Log("BLITZFORGE:install:" + str(index));
-  ChangeData(modRequestVerb, 1);
-  ChangeData(modRequestIndex, index);
-  ChangeData(modRequestSeq, modRequestSeq + 1);
-  ChangeData(modRequestSent, true);
+  if (modRequestSent and modRequestIndex == index and modPendingInstalled)
+  {
+    ChangeData(modConfirmVisible, true);
+  }
+  else
+  {
+    PlaySound(sound="GUI/buttons/open");
+    Log("BLITZFORGE:install:" + str(index));
+    ChangeData(modRequestVerb, 1);
+    ChangeData(modRequestIndex, index);
+    ChangeData(modPendingInstalled, true);
+    ChangeData(modRequestSeq, modRequestSeq + 1);
+    ChangeData(modRequestSent, true);
+  }
 }
 
-// Removal asks first. The button only opens the confirmation.
+// Attached to a mod that was installed when the screen was built. Removal asks
+// first; installing back does not need a confirmation.
 action ON_MOD_REMOVE_CLICKED(int index)
 {
-  PlaySound(sound="GUI/buttons/open");
-  ChangeData(modRequestIndex, index);
-  ChangeData(modConfirmVisible, true);
+  if (modRequestSent and modRequestIndex == index and not modPendingInstalled)
+  {
+    PlaySound(sound="GUI/buttons/open");
+    Log("BLITZFORGE:install:" + str(index));
+    ChangeData(modRequestVerb, 1);
+    ChangeData(modPendingInstalled, true);
+    ChangeData(modRequestSeq, modRequestSeq + 1);
+    ChangeData(modRequestSent, true);
+  }
+  else
+  {
+    ChangeData(modRequestIndex, index);
+    ChangeData(modConfirmVisible, true);
+  }
 }
 
 action ON_MOD_REMOVE_CONFIRMED()
@@ -1012,6 +1058,7 @@ action ON_MOD_REMOVE_CONFIRMED()
   Log("BLITZFORGE:remove:" + str(modRequestIndex));
   ChangeData(modConfirmVisible, false);
   ChangeData(modRequestVerb, 2);
+  ChangeData(modPendingInstalled, false);
   ChangeData(modRequestSeq, modRequestSeq + 1);
   ChangeData(modRequestSent, true);
 }
@@ -1106,6 +1153,11 @@ def rebuild(dry_run: bool = False, source: str = "registry") -> None:
     subprocess.run([PYTHON, str(HERE / "patch_dvpl.py"), "install", HANGAR_REL, str(src)],
                    check=True)
     rebuild_actions()
+
+    # The screen is useless without something to carry out what it asks for.
+    import agent
+    agent.ensure_autostart()
+
     print(f"catalog rebuilt with {len(mods)} mod(s)")
 
 
